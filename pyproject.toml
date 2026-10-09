@@ -1,0 +1,30 @@
+[project]
+name = "kim-agents"
+version = "0.1.0"
+description = "Многоагентная система генерации персонализированных КИМ для педагогов"
+authors = [
+    { name = "evgxnx", email = "birki192@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=3.22.1",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+kim = "kim_agents.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
