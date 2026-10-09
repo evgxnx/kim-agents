@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 runs/
 .DS_Store
+docs/report.docx
+~$*
