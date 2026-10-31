@@ -112,7 +112,8 @@ class Pipeline:
                          RevisionRequest(cell_id=cell.cell_id, item=item, issues=verdict.issues), item.draft.attempt + 1)
                 draft = await self.writer.revise(cell, item, verdict.issues)
                 ctx.send(self.writer.name, self.designer.name, ItemDraftBatch(cell_id=cell.cell_id, items=[draft]), draft.attempt)
-                [revised] = await self.designer.design(cell, [draft])
+                # The designer gets the issues too: «the key stands out by form» is a fault of the options.
+                [revised] = await self.designer.design(cell, [draft], reviewer_issues=verdict.issues)
                 if _fingerprint(revised) == _fingerprint(item):
                     # Loop guard: a rewrite that changes nothing would be rejected forever.
                     result.unfilled_reasons.append(f"{item.item_id}: доработка не изменила задание")

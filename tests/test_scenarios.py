@@ -249,3 +249,32 @@ async def test_s19_assembler_that_drops_an_item_is_not_trusted(make_settings):
 
     assert llm.calls["assemble_test"] == 2  # one repair, then the default layout
     assert not result.test.by_llm and len(result.test.items) == 6
+
+
+async def test_s20_options_guessable_by_length_are_redone_and_reviewer_notes_reach_the_designer(make_settings):
+    seen = {"short": 0, "notes": []}
+
+    def short_once(payload, response):
+        if not seen["short"] and payload["items"][0]["length_range"]:  # practical keys are too short to check
+            seen["short"] = 1
+            for item in response["items"]:
+                for d in item["distractors"]:
+                    d["text"] = d["text"][:30]
+        seen["notes"] += payload.get("reviewer_issues", [])
+        return response
+
+    def first_is_guessable(payload, response):
+        for review in response["items"]:
+            if review["item_id"] == "c2-i1":
+                review["requires_competence"] = False
+                review["solvable_by"] = "выбор самого длинного варианта"
+        return response
+
+    settings = make_settings()
+    llm = ScriptedLLM(transform={"design_distractors": short_once, "review_alignment": first_is_guessable})
+    result = await run(settings, "t-017-weak-assessment.json", llm=llm)
+
+    assert result.status == "ok"
+    statuses = [r["status"] for r in log_records(settings, result.run_id) if r["name"] == "design_distractors"]
+    assert "invalid" in statuses
+    assert any("самого длинного варианта" in note for note in seen["notes"])
