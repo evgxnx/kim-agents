@@ -46,6 +46,8 @@ Teacher profile → Profile Analyst → test plan (cells)
    ↓ each cell runs in parallel
 Item Writer → Distractor Designer → Alignment Reviewer → Quality Verifier → accepted
        ↑__________________ revision request ___________________|
+   ↓ all accepted items
+Assembler → final test document (test.md)
 ```
 
 A **cell** is one line of the test plan: one competence, one level, one item type, and how many items to write.
@@ -57,8 +59,11 @@ A **cell** is one line of the test plan: one competence, one level, one item typ
 | **Distractor Designer** | Adds wrong options based on typical teacher mistakes, plus feedback for each option | `get_misconceptions` |
 | **Alignment Reviewer** | Checks that the item tests the right competence at the right level, and can't be solved by common sense alone | `get_competence_descriptor` |
 | **Quality Verifier** | Solves the item **without seeing the answer key**, recomputes numbers with Python, looks for duplicates | `similarity_search`, `run_python` |
+| **Assembler** | Builds the final test: groups items into sections, sets their order, writes an intro for the teacher | — |
 
 The **orchestrator** is plain code, not an LLM. It passes messages between agents, runs cells in parallel and enforces limits.
+
+The Assembler only chooses the layout. It never sees the options or the answer key, and its plan is checked in code: every accepted item must appear exactly once. Code then spreads the correct answers evenly across the letters A–D. If the Assembler is unavailable, the test is still built in the default order (one section per cell).
 
 Why several agents instead of one: the agent that writes an item is bad at spotting its own mistakes. A separate verifier, on a different model and without the key, catches them.
 
@@ -80,18 +85,18 @@ Why several agents instead of one: the agent that writes an item is bad at spott
 
 ```
 src/kim_agents/
-  agents/      the five agents
+  agents/      the six agents
   tools/       agent tools and the Python sandbox
   data/        DigCompEdu levels, item bank, typical mistakes
   messages.py  message types (Pydantic)
   runner.py    orchestrator
 fixtures/      sample teacher profiles
-tests/         16 scenarios + unit tests
+tests/         19 scenarios + unit tests
 ```
 
 ## Limitations
 
-- The Assembler (final test document) is not built yet. The test is written as Markdown.
+- The final test is written only as Markdown.
 - Offline mode uses a fixed set of scripted answers. It shows that the pipeline works, not how good real items are.
 - For situational items, the "best" answer is an expert judgement. The blind check reduces this risk but does not remove it.
 - Duplicate search compares text, not meaning.
