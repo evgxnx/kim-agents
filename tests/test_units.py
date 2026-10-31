@@ -3,6 +3,7 @@ import os
 import pytest
 from conftest import ScriptedLLM
 
+from kim_agents.agents.assembler import balance_keys
 from kim_agents.agents.base import Agent, RunContext
 from kim_agents.agents.profile_analyst import next_level, select_zones
 from kim_agents.agents.quality_verifier import BlindSolution, QualityVerifier
@@ -111,3 +112,15 @@ def test_values_compare_numbers_and_names():
 def test_load_report_flags_an_overloaded_agent():
     text = format_report({"a": {"llm": 5, "tool": 0, "total": 5, "share": 0.5}, "b": {"llm": 5, "tool": 0, "total": 5, "share": 0.5}})
     assert "больше 40%" in text and "НЕ выполнено" in text
+
+
+def test_balance_keys_moves_keys_but_keeps_items_that_cite_letters():
+    plain = [practical_item().model_copy(update={"draft": practical_item().draft.model_copy(update={"item_id": f"c1-i{n}"})})
+             for n in range(4)]
+    balanced = balance_keys(plain, seed="t")
+    assert sorted(i.key_id for i in balanced) == ["A", "B", "C", "D"]
+    assert all(i.key_option().text == "Двум" and i.key_option().value == "2" for i in balanced)
+
+    cites = practical_item()
+    cites.options[0].feedback = "Неверно: в отличие от варианта B, здесь не учтён прирост."
+    assert all(i.key_id == "B" for i in balance_keys([cites] * 4, seed="t"))
