@@ -169,12 +169,38 @@ class CellResult(BaseModel):
     unfilled_reasons: list[str] = []
 
 
+class AssemblyRequest(BaseModel):
+    blueprint: TestBlueprint
+    items: list[ItemWithOptions]
+
+
+class TestSection(BaseModel):
+    __test__ = False  # not a pytest test class
+
+    title: str
+    note: str = ""
+    items: list[ItemWithOptions]
+
+
+class AssembledTest(BaseModel):
+    """The final test document: verified items in their final order, with option letters rebalanced."""
+
+    intro: str = ""
+    sections: list[TestSection]
+    by_llm: bool = Field(default=True, description="false: default layout, the Assembler was unavailable")
+
+    @property
+    def items(self) -> list[ItemWithOptions]:
+        return [i for s in self.sections for i in s.items]
+
+
 class GenerationResult(BaseModel):
     run_id: str
     status: Literal["ok", "partial", "failed"]
     message: str
     blueprint: TestBlueprint | None = None
     cells: list[CellResult] = []
+    test: AssembledTest | None = None
 
 
 class Envelope(BaseModel):
