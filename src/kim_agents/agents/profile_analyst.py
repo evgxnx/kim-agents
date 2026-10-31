@@ -2,7 +2,14 @@
 
 from pydantic import BaseModel
 
-from ..messages import LEVELS, BlueprintCell, ItemType, Level, TeacherProfile, TestBlueprint
+from ..messages import (
+    LEVELS,
+    BlueprintCell,
+    ItemType,
+    Level,
+    TeacherProfile,
+    TestBlueprint,
+)
 from .base import Agent, AgentError
 
 WEAK_MEAN = 2.0  # area mean on the 0–4 scale below which the area is weak
