@@ -5,6 +5,7 @@ from conftest import ScriptedLLM
 
 from kim_agents.agents.assembler import balance_keys
 from kim_agents.agents.base import Agent, RunContext
+from kim_agents.agents.distractor_designer import length_issue
 from kim_agents.agents.profile_analyst import next_level, select_zones
 from kim_agents.agents.quality_verifier import BlindSolution, QualityVerifier
 from kim_agents.agents.values import same_value
@@ -124,3 +125,10 @@ def test_balance_keys_moves_keys_but_keeps_items_that_cite_letters():
     cites = practical_item()
     cites.options[0].feedback = "Неверно: в отличие от варианта B, здесь не учтён прирост."
     assert all(i.key_id == "B" for i in balance_keys([cites] * 4, seed="t"))
+
+
+def test_key_that_stands_out_by_length_is_flagged():
+    key = "Сопоставить данные журнала и LMS, поговорить с учеником и согласовать план поддержки со сроками."
+    assert length_issue(key, ["Подождать конца четверти.", "Отправить выгрузку.", "Дать задания."])
+    assert length_issue(key, [key[:-5] + "!!!!", key[:-10] + "…", key[:-8] + ".."]) is None
+    assert length_issue("Двум", ["Одному", "Трём", "Четырём"]) is None  # short answers are compared by value
