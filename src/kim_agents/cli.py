@@ -25,6 +25,10 @@ def _describe(env: Envelope) -> str:
     if env.type == "VerdictBatch":
         ok = sum(v["decision"] == "accept" for v in p["verdicts"])
         return f"{p['cell_id']}: принято {ok} из {len(p['verdicts'])}"
+    if env.type == "AssemblyRequest":
+        return f"{len(p['items'])} принятых заданий"
+    if env.type == "AssembledTest":
+        return f"{len(p['sections'])} раздела, {sum(len(s['items']) for s in p['sections'])} заданий"
     if env.type == "RevisionRequest":
         return f"{p['item']['draft']['item_id']}: {p['issues'][0][:70]}"
     return ""

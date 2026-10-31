@@ -7,6 +7,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from .agents.alignment_reviewer import AlignmentReviewer
+from .agents.assembler import Assembler, default_layout, fallback_test
 from .agents.base import AgentError, RunContext, StepLimitExceeded
 from .agents.distractor_designer import DistractorDesigner
 from .agents.item_writer import ItemWriter
@@ -17,6 +18,8 @@ from .config import Settings
 from .llm import LLMClient
 from .messages import (
     AlignmentBatch,
+    AssembledTest,
+    AssemblyRequest,
     BlueprintCell,
     CellResult,
     GenerationResult,
@@ -24,6 +27,7 @@ from .messages import (
     ItemDraftBatch,
     ItemWithOptions,
     RevisionRequest,
+    TestBlueprint,
     VerdictBatch,
 )
 from .render import render_markdown
@@ -122,6 +126,23 @@ class Pipeline:
         ctx.state.put_cell(ctx.run_id, cell.cell_id, result.status, cell.model_dump(mode="json"))
 
 
+async def assemble(ctx: RunContext, blueprint: TestBlueprint, items: list[ItemWithOptions], use_llm: bool) -> AssembledTest:
+    """The Assembler lays out the document; if it is unavailable the test still ships in the default layout."""
+    items = [i for s in default_layout(blueprint, items) for i in s.items]
+    if not use_llm:
+        ctx.log.event("assembler_fallback", reason="run timeout")
+        return fallback_test(blueprint, items)
+    assembler = Assembler(ctx, blueprint.language)
+    ctx.send(ORCHESTRATOR, assembler.name, AssemblyRequest(blueprint=blueprint, items=items))
+    try:
+        test = await assembler.assemble(blueprint, items)
+    except (AgentError, StepLimitExceeded) as e:
+        ctx.log.event("assembler_fallback", reason=str(e))
+        return fallback_test(blueprint, items)
+    ctx.send(assembler.name, ORCHESTRATOR, test)
+    return test
+
+
 def new_run_id() -> str:
     return datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-") + uuid4().hex[:6]
 
@@ -150,6 +171,7 @@ async def generate(
     blueprint = None
     cells: dict[str, CellResult] = {}
     problems: list[str] = []
+    timed_out = False
     try:
         async with asyncio.timeout(settings.limits.run_timeout_s):
             analyst = ProfileAnalyst(ctx)
@@ -175,9 +197,12 @@ async def generate(
         problems.append(str(e))
     except TimeoutError:
         log.event("run_timeout", seconds=settings.limits.run_timeout_s)
+        timed_out = True
         problems.append(f"превышено время прогона ({settings.limits.run_timeout_s:.0f} с)")
 
-    accepted = sum(len(c.accepted) for c in cells.values())
+    accepted_items = [i for c in cells.values() for i in c.accepted]
+    test = await assemble(ctx, blueprint, accepted_items, use_llm=not timed_out) if blueprint and accepted_items else None
+    accepted = len(accepted_items)
     expected = blueprint.items_total if blueprint else 0
     if accepted and accepted >= expected and not problems:
         status, message = "ok", f"Тест собран: {accepted} заданий."
@@ -188,9 +213,11 @@ async def generate(
     for c in cells.values():
         if c.status in ("partial", "unfilled", "failed") and c.unfilled_reasons and not problems:
             message += f" {c.cell_id}: {c.status}."
+    if test and not test.by_llm:
+        message += " Документ собран в порядке по умолчанию: Assembler недоступен."
 
     result = GenerationResult(run_id=run_id, status=status, message=message.strip(), blueprint=blueprint,
-                              cells=list(cells.values()))
+                              cells=list(cells.values()), test=test)
     state.finish_run(run_id, status, result.message)
     state.close()
     log.event("run_finished", status=status, steps=ctx.steps)

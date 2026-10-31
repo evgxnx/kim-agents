@@ -6,7 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-AGENT_NAMES = ("profile_analyst", "item_writer", "distractor_designer", "alignment_reviewer", "quality_verifier")
+AGENT_NAMES = ("profile_analyst", "item_writer", "distractor_designer", "alignment_reviewer", "quality_verifier", "assembler")
 
 
 @dataclass(frozen=True)

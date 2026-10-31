@@ -4,6 +4,7 @@ Each test name carries the scenario number from the README table.
 """
 
 import sqlite3
+from collections import Counter
 
 from conftest import ScriptedLLM, log_records, profile
 
@@ -55,11 +56,12 @@ async def test_s04_load_is_balanced_and_messages_are_stored(make_settings):
     result = await run(settings, "t-017-weak-assessment.json")
 
     shares = load_shares(settings.runs_dir / result.run_id / "calls.jsonl")
-    assert len(shares) == 5
+    assert len(shares) == 6
     assert max(s["share"] for s in shares.values()) <= MAX_SHARE
     db = sqlite3.connect(settings.runs_dir / "kim.sqlite")
     types = {t for (t,) in db.execute("SELECT type FROM messages WHERE run_id = ?", (result.run_id,))}
-    assert {"TestBlueprint", "BlueprintCell", "ItemDraftBatch", "ItemBatch", "AlignmentBatch", "VerdictBatch"} <= types
+    assert {"TestBlueprint", "BlueprintCell", "ItemDraftBatch", "ItemBatch", "AlignmentBatch", "VerdictBatch",
+            "AssemblyRequest", "AssembledTest"} <= types
     assert db.execute("SELECT status FROM runs WHERE run_id = ?", (result.run_id,)).fetchone() == ("ok",)
 
 
@@ -207,3 +209,43 @@ async def test_s16_arithmetic_only_item_is_sent_back_by_alignment_reviewer(make_
     # the item rejected on alignment never reached the verifier
     assert llm.calls["blind_solve"] == 3
 
+
+
+async def test_s17_assembler_lays_out_every_accepted_item_once_with_keys_spread(make_settings):
+    settings = make_settings()
+    result = await run(settings, "t-017-weak-assessment.json")
+
+    test = result.test
+    assert test.by_llm and test.intro
+    accepted = sorted(i.item_id for c in result.cells for i in c.accepted)
+    assert sorted(i.item_id for i in test.items) == accepted
+    for item in test.items:
+        assert item.key_option().text == item.draft.correct_answer
+    keys = Counter(i.key_id for i in test.items)
+    assert max(keys.values()) <= 2  # 6 items over 4 letters
+    md = (settings.runs_dir / result.run_id / "test.md").read_text(encoding="utf-8")
+    assert test.intro in md and md.count("#### Задание") == len(accepted)
+
+
+async def test_s18_assembler_down_still_ships_the_test_in_default_layout(make_settings):
+    settings = make_settings()
+    llm = ScriptedLLM(faults={"assemble_test": lambda payload: FatalLLMError("model unavailable")})
+    result = await run(settings, "t-017-weak-assessment.json", llm=llm)
+
+    assert result.status == "ok"
+    assert not result.test.by_llm and "порядке по умолчанию" in result.message
+    assert [s.items[0].draft.cell_id for s in result.test.sections] == ["c1", "c2"]
+    assert any(r["name"] == "assembler_fallback" for r in log_records(settings, result.run_id))
+
+
+async def test_s19_assembler_that_drops_an_item_is_not_trusted(make_settings):
+    def drop_last(payload, response):
+        response["sections"][-1]["item_ids"].pop()
+        return response
+
+    settings = make_settings()
+    llm = ScriptedLLM(transform={"assemble_test": drop_last})
+    result = await run(settings, "t-017-weak-assessment.json", llm=llm)
+
+    assert llm.calls["assemble_test"] == 2  # one repair, then the default layout
+    assert not result.test.by_llm and len(result.test.items) == 6
