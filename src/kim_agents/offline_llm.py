@@ -355,6 +355,18 @@ class OfflineLLM:
                         "blocking_issues": [], "python_code": e.get("code")})
         return {"items": out}
 
+    def _assemble_test(self, p: dict) -> dict:
+        cells = {c["cell_id"]: c for c in p["cells"]}
+        sections = [
+            {"title": f"{c['area_name']} · {c['competence']}", "note": "",
+             "item_ids": [i["item_id"] for i in p["items"] if i["cell_id"] == cell_id]}
+            for cell_id, c in cells.items()
+        ]
+        areas = ", ".join(c["area_name"] for c in cells.values())
+        intro = (f"Этот тест составлен по вашей самооценке и проверяет области, где она ниже всего: {areas}. "
+                 f"В нём {len(p['items'])} заданий; в каждом выберите один вариант ответа.")
+        return {"intro": intro, "sections": [s for s in sections if s["item_ids"]]}
+
     def _review_alignment(self, p: dict) -> dict:
         return {"items": [{"item_id": i["item_id"], "competence_match": True, "level_match": True,
                            "requires_competence": True, "solvable_by": None, "issues": []} for i in p["items"]]}
